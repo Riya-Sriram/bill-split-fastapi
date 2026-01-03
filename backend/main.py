@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -36,6 +36,7 @@ try:
     users_collection = db["users"]
     groups_collection = db["groups"]
     expenses_collection = db["expenses"]
+    settlements_collection = db["settlements"]
     print("MongoDB connected successfully")
 except ConnectionFailure as e:
     print("Failed to connect to MongoDB")
@@ -44,6 +45,7 @@ except ConnectionFailure as e:
     users_collection = None
     groups_collection = None
     expenses_collection = None
+    settlements_collection = None
 
 app = FastAPI()
 
@@ -162,7 +164,7 @@ async def signup(credentials: SignupRequest):
         "username": credentials.username,
         "password": hashed_password,
         "email": credentials.email,
-        "dp": ["https://static.thenounproject.com/png/65090-200.png"],
+        "dp": ["https://cdn.pixabay.com/photo/2023/02/18/11/00/icon-7797704_640.png"],
         "friends": [],
         "friend_requests": []
     }
@@ -176,7 +178,7 @@ async def signup(credentials: SignupRequest):
         "username": credentials.username
     }
 
-@app.get("/main")
+@app.post("/main")
 async def main_page_auth():
     """Get main page authorization check"""
     return {"success": True, "message": "Authorized"}
@@ -197,7 +199,7 @@ async def get_profile_details(request: ProfileDetailsRequest):
             "success": True,
             "username": user.get("username"),
             "email": user.get("email"),
-            "dp": user.get("dp", ["https://static.thenounproject.com/png/65090-200.png"])
+            "dp": user.get("dp", ["https://cdn.pixabay.com/photo/2023/02/18/11/00/icon-7797704_640.png"])
         }
     except Exception as e:
         print(f"Error in get_profile_details: {str(e)}")
@@ -226,35 +228,39 @@ class UpdateProfileRequest(BaseModel):
 
 @app.post("/update_profile_details")
 async def update_profile_details(
-    request: UpdateProfileRequest,
+    username: str = Form(...),
+    newusername: str = Form(...),
+    password: Optional[str] = Form(None),
     dp: Optional[UploadFile] = File(None)
 ):
     """Update user profile details"""
     if users_collection is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     
-    user = users_collection.find_one({"username": request.username})
+    user = users_collection.find_one({"username": username})
     
     if not user:
         return {"success": False, "message": "User not found"}
     
     # Check if new username already exists
-    if request.newusername != request.username:
-        existing = users_collection.find_one({"username": request.newusername})
+    if newusername != username:
+        existing = users_collection.find_one({"username": newusername})
         if existing:
             return {"success": False, "message": "Username already exists"}
     
-    update_data = {"username": request.newusername}
+    update_data = {"username": newusername}
     
-    if request.password:
-        update_data["password"] = hash_password(request.password)
+    # Only update password if it's provided and not empty
+    if password and password.strip():
+        print(f"Updating password for user {username}")
+        update_data["password"] = hash_password(password)
     
     if dp:
         # In production, save file to storage service
         # For now, we'll just store the filename
         update_data["dp"] = [f"dp_{uuid.uuid4()}_{dp.filename}"]
     
-    users_collection.update_one({"username": request.username}, {"$set": update_data})
+    users_collection.update_one({"username": username}, {"$set": update_data})
     
     return {"success": True, "message": "Profile updated successfully"}
 
@@ -392,7 +398,7 @@ async def get_main_page_group_details(request: GroupDetailsRequest):
 
         raise HTTPException(status_code=500, detail="Database connection failed")
     
-    groups = groups_collection.find({"members": request.username})
+    groups = groups_collection.find({"members.username": request.username})
     
     result = []
     for group in groups:
@@ -441,7 +447,7 @@ async def create_group(request: CreateGroupRequest):
 
 @app.post("/addexpense")
 async def add_expense(request: AddExpenseRequest):
-    if expenses_collection is None:
+    if expenses_collection is None or settlements_collection is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
 
     splits_list = [
@@ -461,6 +467,40 @@ async def add_expense(request: AddExpenseRequest):
     }
 
     result = expenses_collection.insert_one(expense)
+    
+    # Update settlements: each person who has a split owes the payer
+    print(f"Creating settlements for expense: {request.description}")
+    print(f"Paid by: {request.paidBy}, GroupId: {request.groupId}")
+    print(f"Splits: {splits_list}")
+    
+    for split in splits_list:
+        if split["username"] != request.paidBy and split["amount"] > 0:
+            print(f"Processing settlement for {split['username']} owing {split['amount']} to {request.paidBy}")
+            # Check if settlement already exists
+            existing = settlements_collection.find_one({
+                "user": split["username"],
+                "debtTo": request.paidBy,
+                "groupId": request.groupId
+            })
+            
+            if existing:
+                # Update existing settlement
+                new_amount = existing["amount"] + split["amount"]
+                print(f"Updating existing settlement: {existing['_id']}, new amount: {new_amount}")
+                settlements_collection.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {"amount": new_amount}}
+                )
+            else:
+                # Create new settlement
+                new_settlement = {
+                    "user": split["username"],
+                    "debtTo": request.paidBy,
+                    "amount": split["amount"],
+                    "groupId": request.groupId
+                }
+                print(f"Creating new settlement: {new_settlement}")
+                settlements_collection.insert_one(new_settlement)
 
     return {
         "success": True,
@@ -525,7 +565,9 @@ async def get_group_expenses(groupId: str):
             "paidBy": exp.get("paidBy"),
             "cost": exp.get("cost"),
             "description": exp.get("description"),
-            "splits": exp.get("splits", [])
+            "category": exp.get("category", ""),
+            "splits": exp.get("splits", []),
+            "Day": exp.get("Day")
         })
     
     return result
@@ -565,13 +607,16 @@ async def get_group_all_details(request: GroupIdRequest):
             "paidBy": exp["paidBy"],
             "cost": exp["cost"],
             "description": exp["description"],
-            "splits": exp.get("splits", [])
+            "category": exp.get("category", ""),
+            "splits": exp.get("splits", []),
+            "Day": exp.get("Day")
         })
 
     return {
         "success": True,
         "groupId": str(group["_id"]),
         "groupName": group["groupName"],
+        "groupAdmin": group.get("groupAdmin", ""),
         "members": group["members"],
         "expenses": expenses_list
     }
@@ -589,10 +634,168 @@ async def expense_details(request: GroupIdRequest):
             "paidBy": exp["paidBy"],
             "cost": exp["cost"],
             "description": exp["description"],
-            "splits": exp.get("splits", [])
+            "category": exp.get("category", ""),
+            "splits": exp.get("splits", []),
+            "Day": exp.get("Day")
         }
         for exp in expenses
     ]
+
+
+class ExpenseIdRequest(BaseModel):
+    expenseId: str
+
+class SettleDebtRequest(BaseModel):
+    username: str
+    creditor: str
+    groupId: str
+
+@app.post("/settle_debt")
+async def settle_debt(request: SettleDebtRequest):
+    """Mark a debt as settled between two users in a group"""
+    if settlements_collection is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        # Delete the settlement record
+        result = settlements_collection.delete_one({
+            "user": request.username,
+            "debtTo": request.creditor,
+            "groupId": request.groupId
+        })
+        
+        if result.deleted_count > 0:
+            return {"success": True, "message": "Debt settled successfully"}
+        else:
+            return {"success": False, "message": "Settlement not found"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+class GetSettlementsRequest(BaseModel):
+    username: str
+    groupId: str
+
+@app.post("/get_settlements")
+async def get_settlements(request: GetSettlementsRequest):
+    """Get all settlements for a user in a specific group"""
+    if settlements_collection is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        settlements = settlements_collection.find({
+            "user": request.username,
+            "groupId": request.groupId
+        })
+        
+        result = []
+        for settlement in settlements:
+            result.append({
+                "person": settlement["debtTo"],
+                "amount": round(settlement["amount"], 2)
+            })
+        
+        return result
+    except Exception as e:
+        print(f"Error getting settlements: {str(e)}")
+        return []
+
+
+class ExpenseIdRequest(BaseModel):
+    expenseId: str
+
+@app.post("/delete_expense")
+async def delete_expense(request: ExpenseIdRequest):
+    """Delete an expense"""
+    if expenses_collection is None or settlements_collection is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        # Get the expense first to reverse settlements
+        expense = expenses_collection.find_one({"_id": ObjectId(request.expenseId)})
+        
+        if expense:
+            # Reverse settlements
+            paidBy = expense.get("paidBy")
+            splits = expense.get("splits", [])
+            groupId = expense.get("groupId")
+            
+            for split in splits:
+                if split["username"] != paidBy and split["amount"] > 0:
+                    # Find and update or delete settlement
+                    existing = settlements_collection.find_one({
+                        "user": split["username"],
+                        "debtTo": paidBy,
+                        "groupId": groupId
+                    })
+                    
+                    if existing:
+                        new_amount = existing["amount"] - split["amount"]
+                        if new_amount <= 0.01:  # Remove if paid off or negligible
+                            settlements_collection.delete_one({"_id": existing["_id"]})
+                        else:
+                            settlements_collection.update_one(
+                                {"_id": existing["_id"]},
+                                {"$set": {"amount": new_amount}}
+                            )
+        
+        # Now delete the expense
+        result = expenses_collection.delete_one({"_id": ObjectId(request.expenseId)})
+        
+        if result.deleted_count > 0:
+            return {"success": True, "message": "Expense deleted successfully"}
+        
+        return {"success": False, "message": "Expense not found"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@app.post("/deletegroup")
+async def delete_group(request: GroupIdRequest):
+    """Delete a group and all its expenses and settlements"""
+    if groups_collection is None or expenses_collection is None or settlements_collection is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        # Delete all settlements associated with the group
+        settlements_collection.delete_many({"groupId": request.groupId})
+        
+        # Delete all expenses associated with the group
+        expenses_collection.delete_many({"groupId": request.groupId})
+        
+        # Then delete the group
+        result = groups_collection.delete_one({"_id": ObjectId(request.groupId)})
+        
+        if result.deleted_count > 0:
+            return {"success": True, "message": "Group deleted successfully"}
+        
+        return {"success": False, "message": "Group not found"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+class RemoveMemberRequest(BaseModel):
+    groupId: str
+    username: str
+
+@app.post("/removemember")
+async def remove_member(request: RemoveMemberRequest):
+    """Remove a member from a group"""
+    if groups_collection is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        result = groups_collection.update_one(
+            {"_id": ObjectId(request.groupId)},
+            {"$pull": {"members": {"username": request.username}}}
+        )
+        
+        if result.modified_count > 0:
+            return {"success": True, "message": "Member removed successfully"}
+        
+        return {"success": False, "message": "Failed to remove member"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 if __name__ == "__main__":

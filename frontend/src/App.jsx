@@ -9,6 +9,7 @@ import Groupdetails from './Pages/group';
 import Profile from './Pages/Profiledetails';
 import Internet from './Pages/internet';
 import ForgotPassword from './Pages/forgotpassword';
+import ProtectedRoute from './Components/ProtectedRoute';
 
 function App(){
   const [loading, setLoading]=useState(true);
@@ -31,11 +32,11 @@ function App(){
           <Route path='/' element={<Log />} />
           <Route path='/signup' element={<Sign />} />
           <Route path='/forgotpassword' element={<ForgotPassword />} />
-          <Route path='/main' element={<MainPage />} />
-          <Route path='/search' element={<Search />} />
-          <Route path='/group_create' element={<Group />} />
-          <Route path='/group' element={<Groupdetails />} />
-          <Route path='/profile' element={<Profile />} />
+          <Route path='/main' element={<ProtectedRoute><MainPage /></ProtectedRoute>} />
+          <Route path='/search' element={<ProtectedRoute><Search /></ProtectedRoute>} />
+          <Route path='/group_create' element={<ProtectedRoute><Group /></ProtectedRoute>} />
+          <Route path='/group' element={<ProtectedRoute><Groupdetails /></ProtectedRoute>} />
+          <Route path='/profile' element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         </Route>
       </Routes>
   )

@@ -70,19 +70,24 @@ export const profileAPI = {
   },
 
   updateDetails: async (updateData) => {
+    // When sending FormData, don't stringify and don't set Content-Type
+    const headers = {
+      'Authorization': localStorage.getItem('Token')
+    };
+    
     const response = await fetch(`${BACKEND_URL}/update_profile_details`, {
       method: 'POST',
-      headers: getHeaders(true),
-      body: JSON.stringify(updateData),
+      headers: headers,
+      body: updateData, // FormData is sent as-is
     });
     return handleResponse(response);
   },
 
-  checkPassword: async (password) => {
+  checkPassword: async (passwordData) => {
     const response = await fetch(`${BACKEND_URL}/passwordcheck`, {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(passwordData),
     });
     return handleResponse(response);
   },
@@ -213,20 +218,11 @@ export const groupAPI = {
     return handleResponse(response);
   },
 
-  addGroupMember: async (groupId, memberId) => {
+  addGroupMember: async (groupId, username) => {
     const response = await fetch(`${BACKEND_URL}/add_group_member`, {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ group_id: groupId, member_id: memberId }),
-    });
-    return handleResponse(response);
-  },
-
-  createGroup: async (groupData) => {
-    const response = await fetch(`${BACKEND_URL}/creategroup`, {
-      method: 'POST',
-      headers: getHeaders(true),
-      body: JSON.stringify(groupData),
+      body: JSON.stringify({ groupId, username }),
     });
     return handleResponse(response);
   },
@@ -284,6 +280,31 @@ export const expenseAPI = {
       method: 'POST',
       headers: getHeaders(true),
       body: JSON.stringify({ expense_id: expenseId }),
+    });
+    return handleResponse(response);
+  },
+
+  settleDebt: async (creditor, groupId) => {
+    const response = await fetch(`${BACKEND_URL}/settle_debt`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ 
+        username: localStorage.getItem('Username'),
+        creditor: creditor,
+        groupId: groupId
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  getSettlements: async (groupId) => {
+    const response = await fetch(`${BACKEND_URL}/get_settlements`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ 
+        username: localStorage.getItem('Username'),
+        groupId: groupId
+      }),
     });
     return handleResponse(response);
   },

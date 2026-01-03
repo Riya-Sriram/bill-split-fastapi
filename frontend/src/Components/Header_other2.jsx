@@ -97,7 +97,7 @@ function Header() {
                             className="btn btn-ghost btn-circle avatar border border-white hover:shadow-[0_0_10px_rgba(255,255,255,0.4)] transition-shadow duration-200">
                             <div className="w-10 rounded-full">
                                 <img
-                                    src={dp || "https://static.thenounproject.com/png/65090-200.png"}
+                                    src={dp || "https://cdn.pixabay.com/photo/2023/02/18/11/00/icon-7797704_640.png"}
                                     alt="profile"
                                 />
                             </div>

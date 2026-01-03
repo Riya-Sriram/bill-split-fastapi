@@ -121,37 +121,51 @@ function Header() {
           <div className="dropdown dropdown-end ml-3">
             <div tabIndex="0" role="button" className="btn btn-ghost btn-circle avatar border border-white hover:border-white transition-all">
               <div className="w-10 rounded-full">
-                <img src={dp || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} alt="profile" />
+                <img src={dp || "https://cdn.pixabay.com/photo/2023/02/18/11/00/icon-7797704_640.png"} alt="profile" />
               </div>
             </div>
             <ul
               tabIndex="0"
-              className="menu menu-sm dropdown-content bg-black text-white rounded-box z-10 mt-3 w-52 p-2 border border-white shadow-[0_0_5px_white]"
+              className="menu menu-sm dropdown-content bg-black text-white rounded-box z-10 mt-3 w-52 p-2 border border-white shadow-md"
             >
-              <h1 className="text-lg p-2">{names}</h1>
+              <h1 className="text-lg p-3">{names}</h1>
               <li><a onClick={() => Navigate("/profile")}>Change Profile Details</a></li>
               <li>
-                <button className="bg-red-300 text-black py-1 px-3 rounded hover:bg-red-400 transition-colors duration-200" onClick={() => document.getElementById('my_modal_1').showModal()}>
-                  Delete Account
-                </button>
+                <a>
+                  <button
+                    className="hover:shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-shadow duration-200"
+                    onClick={() => document.getElementById('my_modal_1').showModal()}
+                  >
+                    Delete Account
+                  </button>
+                </a>
               </li>
-              <li>
-                <button className="w-full bg-black border border-white text-white py-1 px-3 rounded hover:bg-white hover:text-black transition-colors duration-200" onClick={() => Navigate("/")}>
-                  Logout
-                </button>
-              </li>
+              <div className="grid place-items-center py-2">
+                <li>
+                  <a className="w-20 btn bg-red-500 text-white hover:shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-shadow duration-200"
+                    onClick={() => Navigate("/")}>
+                    Logout
+                  </a>
+                </li>
+              </div>
             </ul>
 
             {/* Modal */}
             <dialog id='my_modal_1' className="modal">
               <div className="modal-box bg-black text-white border border-white">
-                <h3 className="font-medium text-lg">Confirm Deletion</h3>
+                <h3 className="font-semibold text-lg">Confirm Deletion</h3>
                 <p className="py-4">Are you sure you want to delete your account? This action cannot be undone.</p>
                 <div className="modal-action flex gap-2">
-                  <button className="bg-red-300 text-black py-1 px-3 rounded hover:bg-red-400 transition-colors duration-200" onClick={deleteAccount}>
+                  <button
+                    className="btn bg-red-600 text-white hover:shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-shadow duration-200"
+                    onClick={deleteAccount}
+                  >
                     Yes
                   </button>
-                  <button className="bg-black text-white border border-white py-1 px-3 rounded hover:bg-white hover:text-black transition-colors duration-200" onClick={() => document.getElementById('my_modal_1').close()}>
+                  <button
+                    className="btn bg-white text-black hover:shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-shadow duration-200"
+                    onClick={() => document.getElementById('my_modal_1').close()}
+                  >
                     Cancel
                   </button>
                 </div>

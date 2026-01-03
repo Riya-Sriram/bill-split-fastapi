@@ -35,7 +35,7 @@ function profile(){
 
     const checkpassword=async(password)=>{
         try{
-        const data = await api.profile.checkPassword(password);
+        const data = await api.profile.checkPassword({username: MyName, password: password});
         if (data.success){
             return true;
         }
@@ -52,7 +52,10 @@ function profile(){
     const formData=new FormData();
     formData.append("username",MyName);
     formData.append("newusername",newusername);
-    formData.append("password",password);
+    // Only append password if it's not empty
+    if(password && password.trim()){
+        formData.append("password",password);
+    }
     if(dp) formData.append("dp",dp);
     try{
         const data = await api.profile.updateDetails(formData);
